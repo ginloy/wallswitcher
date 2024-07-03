@@ -2,7 +2,6 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use rand::seq::IteratorRandom;
 use rand::seq::SliceRandom;
 
 use crate::animation::{Fade, Static};
