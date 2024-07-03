@@ -2,8 +2,13 @@ use animation::{Animation, Fade, Static};
 use anyhow::Result;
 use chrono::TimeDelta;
 use cli::Cli;
+use raw_window_handle::{
+    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+};
 use std::{
+    ffi::c_void,
     io::Write,
+    ptr::NonNull,
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -66,12 +71,53 @@ fn main() -> Result<()> {
     let layer_shell = LayerShell::bind(&globals, &qh).expect("Layer shell not available");
     let surface = compositor_state.create_surface(&qh);
 
-    let layer =
-        layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some("wallpaper"), None);
+    let output = output_state
+        .outputs()
+        .filter(|o| o.is_alive())
+        .next()
+        .unwrap();
+    let layer = layer_shell.create_layer_surface(
+        &qh,
+        surface,
+        Layer::Background,
+        Some("wallpaper"),
+        Some(&output),
+    );
     layer.set_anchor(Anchor::all());
     layer.set_size(0, 0);
     layer.set_exclusive_zone(-1);
     layer.commit();
+
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..Default::default()
+    });
+    let raw_layer_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(
+        NonNull::new(layer.wl_surface().id().as_ptr() as *mut c_void).unwrap(),
+    ));
+    let raw_display_handle = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+        NonNull::new(conn.backend().display_ptr() as *mut c_void).unwrap(),
+    ));
+
+    let surface = unsafe {
+        instance
+            .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                raw_window_handle: raw_layer_handle,
+                raw_display_handle,
+            })
+            .expect("Failed to create gpu surface")
+    };
+
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        compatible_surface: Some(&surface),
+        ..Default::default()
+    }))
+    .expect("Failed to get adapter");
+
+    let (device, gpu_queue) = pollster::block_on(adapter.request_device(&Default::default(), None))
+        .expect("Failed to request device");
+    println!("Device: {device:?}");
+    return Ok(());
 
     if let Ok(region) = Region::new(&compositor_state) {
         layer

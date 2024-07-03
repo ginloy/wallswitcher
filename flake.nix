@@ -19,7 +19,19 @@
         defaultPackage = naersk-lib.buildPackage ./.;
         devShell = with pkgs;
           mkShell {
-            nativeBuildInputs = [libxkbcommon pkg-config cargo rustc rustfmt pre-commit rustPackages.clippy];
+            nativeBuildInputs = [
+              libxkbcommon
+              pkg-config
+              cargo
+              rustc
+              rustfmt
+              pre-commit
+              rustPackages.clippy
+            ];
+            buildInputs = [
+              wayland-scanner
+              wayland
+            ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
           };
       }
