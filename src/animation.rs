@@ -83,8 +83,12 @@ impl Fade {
         }
     }
 
-    fn get(&self, idx: usize) -> Option<Vec<u8>> {
-        let alpha = self.frames.get(idx)?.as_ref()?;
+    fn get(&mut self, idx: usize) -> Option<Vec<u8>> {
+        if idx >= self.frames.len() {
+            self.finished = true;
+            return None;
+        }
+        let alpha = std::mem::take(self.frames.get_mut(idx)?)?;
         let fg_img = self.next_img.to_rgba8();
         let bg_img = self.current_img.to_rgba8();
         if idx == 0 {
@@ -96,7 +100,7 @@ impl Fade {
         Some(blend(
             fg_img.as_raw().as_slice(),
             bg_img.as_raw().as_slice(),
-            *alpha,
+            alpha,
         ))
     }
 }
@@ -109,19 +113,11 @@ impl Animation for Fade {
         self.next_img = resize(next_img, dimensions);
         if self.start.is_none() {
             self.start = Some(Instant::now());
-            let temp = self.get(0);
-            self.frames[0] = None;
-            return temp;
+            return self.get(0);
         }
         let start = self.start.unwrap();
         let idx = (start.elapsed().as_secs_f32() * self.fps).round() as usize;
-        if idx >= self.frames.len() {
-            self.finished = true;
-            return None;
-        }
-        let temp = self.get(idx);
-        self.frames[idx] = None;
-        temp
+        self.get(idx)
     }
 
     fn finished(&self) -> bool {

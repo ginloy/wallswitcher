@@ -97,8 +97,11 @@ fn main() -> Result<()> {
     };
 
     let mut last_change = Instant::now();
+    let freq = 50;
+    let cycle_time = Duration::from_secs(1) / freq;
 
     loop {
+        let start = Instant::now();
         queue.flush().unwrap();
         queue.prepare_read().and_then(|g| g.read().ok());
         queue.dispatch_pending(&mut state).unwrap();
@@ -115,7 +118,10 @@ fn main() -> Result<()> {
         if state.need_redraw {
             state.draw(&qh);
         }
-        std::thread::sleep(Duration::from_millis(5));
+        let elapsed = start.elapsed();
+        if elapsed < cycle_time {
+            std::thread::sleep(cycle_time - elapsed);
+        }
     }
 }
 
