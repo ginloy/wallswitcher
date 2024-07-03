@@ -27,12 +27,21 @@
               rustfmt
               pre-commit
               rustPackages.clippy
+              wgpu-utils
             ];
             buildInputs = [
-              wayland-scanner
               wayland
+              libGL
+              vulkan-loader
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
+            LD_LIBRARY_PATH = ''
+              ${lib.makeLibraryPath [
+                wayland
+                vulkan-loader
+                libGL
+              ]}
+            '';
           };
       }
     );

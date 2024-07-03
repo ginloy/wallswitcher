@@ -28,7 +28,10 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{wl_output, wl_shm, wl_surface},
+    protocol::{
+        wl_output::{self, WlOutput},
+        wl_shm, wl_surface,
+    },
     Connection, Proxy, QueueHandle,
 };
 
@@ -71,11 +74,7 @@ fn main() -> Result<()> {
     let layer_shell = LayerShell::bind(&globals, &qh).expect("Layer shell not available");
     let surface = compositor_state.create_surface(&qh);
 
-    let output = output_state
-        .outputs()
-        .filter(|o| o.is_alive())
-        .next()
-        .unwrap();
+    let output = output_state.outputs().find(WlOutput::is_alive).unwrap();
     let layer = layer_shell.create_layer_surface(
         &qh,
         surface,
@@ -108,15 +107,18 @@ fn main() -> Result<()> {
             .expect("Failed to create gpu surface")
     };
 
+    println!("Surface: {surface:#?}");
+
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         compatible_surface: Some(&surface),
         ..Default::default()
     }))
     .expect("Failed to get adapter");
+    println!("{:#?}", adapter.get_info());
 
     let (device, gpu_queue) = pollster::block_on(adapter.request_device(&Default::default(), None))
         .expect("Failed to request device");
-    println!("Device: {device:?}");
+    println!("Device: {device:#?}");
     return Ok(());
 
     if let Ok(region) = Region::new(&compositor_state) {
