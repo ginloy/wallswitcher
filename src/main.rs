@@ -1,11 +1,13 @@
 use animation::{Animation, Fade, Static};
 use anyhow::Result;
+use chrono::TimeDelta;
 use cli::Cli;
-use rand::distributions::Distribution;
 use std::{
     io::Write,
+    sync::mpsc,
     time::{Duration, Instant},
 };
+use timer::Timer;
 
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
@@ -21,11 +23,8 @@ use smithay_client_toolkit::{
 };
 use wayland_client::{
     globals::registry_queue_init,
-    protocol::{
-        wl_output, wl_shm,
-        wl_surface::{self},
-    },
-    Connection, QueueHandle,
+    protocol::{wl_output, wl_shm, wl_surface},
+    Connection, Proxy, QueueHandle,
 };
 
 mod animation;
@@ -56,33 +55,31 @@ struct State {
 // }
 
 fn main() -> Result<()> {
-    let (images, interval) = Cli::parse_and_validate()?;
-    let mut rng = rand::thread_rng();
-    let rand = rand::distributions::Uniform::from(0..images.len());
-    let mut generator = rand.sample_iter(&mut rng);
+    let (mut imgloader, interval) = Cli::parse_and_validate()?;
     let conn = Connection::connect_to_env().expect("Failed to get connection to wayland server");
     let (globals, mut queue) = registry_queue_init::<State>(&conn).unwrap();
     let qh = queue.handle();
 
-    let mut image =
-        image::open(images.get(generator.next().unwrap()).unwrap()).expect("Not an image");
     let compositor_state = CompositorState::bind(&globals, &qh).expect("Compositor not available");
     let output_state = OutputState::new(&globals, &qh);
     let shm = Shm::bind(&globals, &qh).expect("Failed to get shm");
     let layer_shell = LayerShell::bind(&globals, &qh).expect("Layer shell not available");
     let surface = compositor_state.create_surface(&qh);
+
     let layer =
         layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some("wallpaper"), None);
     layer.set_anchor(Anchor::all());
     layer.set_size(0, 0);
     layer.set_exclusive_zone(-1);
     layer.commit();
+
     if let Ok(region) = Region::new(&compositor_state) {
         layer
             .wl_surface()
             .set_input_region(Some(region.wl_region()));
         region.wl_region().destroy();
     };
+
     let mut state = State {
         registry_state: RegistryState::new(&globals),
         output_state,
@@ -91,29 +88,35 @@ fn main() -> Result<()> {
         shm_state: shm,
         layer_shell,
         layer,
-        animation: Box::new(Static::new(image.clone())),
+        animation: Box::new(imgloader.load_static()?),
         dimensions: (0, 0),
         need_redraw: false,
     };
 
-    let mut last_change = Instant::now();
-    let freq = 50;
+    let freq = 30;
     let cycle_time = Duration::from_secs(1) / freq;
+    let timer = Timer::new();
+    let (sender, receiver) = mpsc::channel();
+    let interval = TimeDelta::from_std(interval)?;
+    let _guard = timer.schedule_repeating(interval, move || {
+        sender.send(imgloader.load_fade()).expect("Channel closed");
+    });
 
     loop {
         let start = Instant::now();
         queue.flush().unwrap();
         queue.prepare_read().and_then(|g| g.read().ok());
         queue.dispatch_pending(&mut state).unwrap();
-        if last_change.elapsed() > interval {
-            let path = images.get(generator.next().unwrap()).unwrap();
-            println!("{}", path.display());
-            let new_img = image::open(path).unwrap();
-            let animation = Fade::new(Duration::from_secs(5), 24, new_img.clone(), image);
-            state.animation = Box::new(animation);
-            image = new_img;
-            last_change = Instant::now();
-            state.need_redraw = true;
+        if let Ok(anim) = receiver.try_recv() {
+            match anim {
+                Err(e) => {
+                    eprintln!("Could not get animation: {e}");
+                }
+                Ok(a) => {
+                    state.animation = Box::new(a);
+                    state.need_redraw = true;
+                }
+            }
         }
         if state.need_redraw {
             state.draw(&qh);

@@ -3,6 +3,8 @@ use std::{path::PathBuf, time::Duration};
 use anyhow::{bail, Result};
 use clap::{arg, Parser};
 
+use crate::image_loader::ImageLoader;
+
 #[derive(Parser)]
 pub struct Cli {
     /// Interval in seconds between image switches
@@ -14,17 +16,14 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn parse_and_validate() -> Result<(Vec<PathBuf>, Duration)> {
+    pub fn parse_and_validate() -> Result<(ImageLoader, Duration)> {
         let args = Cli::parse();
         if !args.dir.is_dir() {
             bail!("{} is not an existing directory", args.dir.display());
         }
-        let files = args
-            .dir
-            .read_dir()?
-            .filter_map(Result::ok)
-            .map(|f| f.path())
-            .collect::<Vec<_>>();
-        Ok((files, Duration::from_secs(args.interval)))
+        Ok((
+            ImageLoader::new(args.dir),
+            Duration::from_secs(args.interval),
+        ))
     }
 }
