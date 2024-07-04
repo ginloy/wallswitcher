@@ -63,6 +63,7 @@ struct State {
 // }
 
 fn main() -> Result<()> {
+    env_logger::init();
     let (mut imgloader, interval) = Cli::parse_and_validate()?;
     let conn = Connection::connect_to_env().expect("Failed to get connection to wayland server");
     let (globals, mut queue) = registry_queue_init::<State>(&conn).unwrap();
@@ -88,7 +89,7 @@ fn main() -> Result<()> {
     layer.commit();
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
+        backends: wgpu::Backends::PRIMARY,
         ..Default::default()
     });
     let raw_layer_handle = RawWindowHandle::Wayland(WaylandWindowHandle::new(

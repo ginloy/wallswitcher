@@ -16,11 +16,28 @@
         pkgs = import nixpkgs {inherit system;};
         naersk-lib = pkgs.callPackage naersk {};
       in {
-        defaultPackage = naersk-lib.buildPackage ./.;
+        defaultPackage = with pkgs;
+          naersk-lib.buildPackage {
+            src = ./.;
+            nativeBuildInputs = [
+              pkg-config
+            ];
+            buildInputs = [
+              libxkbcommon
+              wayland
+              vulkan-loader
+            ];
+            postInstall = ''
+              patchelf --shrink-rpath $out/bin/wayland_test
+              patchelf --add-rpath ${lib.makeLibraryPath [
+                vulkan-loader
+              ]} $out/bin/wayland_test
+            '';
+            dontPatchELF = true;
+          };
         devShell = with pkgs;
           mkShell {
             nativeBuildInputs = [
-              libxkbcommon
               pkg-config
               cargo
               rustc
@@ -30,17 +47,17 @@
               wgpu-utils
             ];
             buildInputs = [
+              libxkbcommon
               wayland
               libGL
               vulkan-loader
+              libglvnd
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
             LD_LIBRARY_PATH = ''
               ${lib.makeLibraryPath [
-                wayland
                 vulkan-loader
-                libGL
-              ]}
+              ]}:
             '';
           };
       }
