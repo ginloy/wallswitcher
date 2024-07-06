@@ -18,6 +18,7 @@ use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, Region},
     delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_shm,
     output::{OutputHandler, OutputState},
+    reexports::calloop,
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
     shell::{
@@ -38,6 +39,7 @@ use wayland_client::{
 mod animation;
 mod cli;
 mod image_loader;
+mod render;
 
 struct State {
     registry_state: RegistryState,
@@ -107,7 +109,6 @@ fn main() -> Result<()> {
             })
             .expect("Failed to create gpu surface")
     };
-
     println!("Surface: {surface:#?}");
 
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
