@@ -1,18 +1,25 @@
-use std::{iter::once, path::Path};
+use std::{
+    iter::once,
+    time::{Duration, Instant},
+};
 
-use crate::render::{animation::INDICES, Context, Texture};
-use anyhow::Result;
 use image::DynamicImage;
+use keyframe::functions::EaseInOut;
 use log::*;
+
+use crate::render::{self, Context, Texture};
 
 use super::{
     create_index_buffer, create_pipeline, create_texture_binds, create_uniform_binds,
-    create_vertex_buffer, Animation,
+    create_vertex_buffer, Animation, INDICES,
 };
 
-pub struct Static {
-    finished: bool,
-    texture: Texture,
+pub struct Fade {
+    start_time: Option<Instant>,
+    duration: Duration,
+
+    texture_a: Texture,
+    texture_b: Texture,
     texture_bind_group: wgpu::BindGroup,
 
     vertex_buffer: wgpu::Buffer,
@@ -24,29 +31,37 @@ pub struct Static {
     render_pipeline: wgpu::RenderPipeline,
 }
 
-impl Static {
-    pub fn open(img: &Path, ctx: &Context) -> Result<Self> {
-        let img = image::open(img)?;
-        Ok(Self::from_img(&img, ctx))
-    }
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniform {
+    alpha: f32,
+    surface_to_texture_a_arr: f32,
+    surface_to_texture_b_arr: f32,
+}
 
-    pub fn from_img(img: &DynamicImage, ctx: &Context) -> Self {
-        let texture = Texture::from_image(img, ctx);
-        let finished = false;
+impl Fade {
+    pub fn new(
+        img_a: &DynamicImage,
+        img_b: &DynamicImage,
+        duration: Duration,
+        ctx: &render::Context,
+    ) -> Self {
+        let start_time = None;
+        let texture_a = Texture::from_image(img_a, ctx);
+        let texture_b = Texture::from_image(img_b, ctx);
 
         let (texture_bind_group_layout, texture_bind_group) =
-            create_texture_binds(&[&texture], ctx);
+            create_texture_binds(&[&texture_a, &texture_b], ctx);
 
         let vertex_buffer = create_vertex_buffer(ctx);
         let index_buffer = create_index_buffer(ctx);
 
         let (uniform_buffer, uniform_bind_group_layout, uniform_bind_group) =
-            create_uniform_binds(32, ctx);
+            create_uniform_binds(std::mem::size_of::<Uniform>() as u64, ctx);
 
         let shader = ctx
             .device()
-            .create_shader_module(wgpu::include_wgsl!("./shaders/static.wgsl"));
-
+            .create_shader_module(wgpu::include_wgsl!("./shaders/fade.wgsl"));
         let render_pipeline = create_pipeline(
             ctx,
             &[&texture_bind_group_layout, &uniform_bind_group_layout],
@@ -55,29 +70,68 @@ impl Static {
         );
 
         Self {
-            finished: false,
-            texture,
+            start_time,
+            duration,
+
+            texture_a,
+            texture_b,
             texture_bind_group,
+
             vertex_buffer,
             index_buffer,
+
             uniform_buffer,
             uniform_bind_group,
+
             render_pipeline,
         }
     }
-}
 
-impl Animation for Static {
+    fn update_uniform(&mut self, ctx: &Context) {
+        if self.start_time.is_none() {
+            self.start_time = Some(Instant::now());
+        }
+        let alpha = self
+            .start_time
+            .map(|t| t.elapsed().as_secs_f32() / self.duration.as_secs_f32())
+            .map(|s| {
+                if s >= 1.0 {
+                    1.0
+                } else {
+                    keyframe::ease(EaseInOut, 0.0, 1.0, s) as f32
+                }
+            })
+            .unwrap_or(0.0);
+
+        debug!("alpha = {alpha}");
+
+        let surface_to_texture_a_arr = ctx.surface_aspect_ratio() / self.texture_a.aspect_ratio();
+        let surface_to_texture_b_arr = ctx.surface_aspect_ratio() / self.texture_b.aspect_ratio();
+
+        let data = Uniform {
+            alpha,
+            surface_to_texture_a_arr,
+            surface_to_texture_b_arr,
+        };
+        ctx.queue()
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[data]));
+    }
+}
+impl Animation for Fade {
     fn is_finished(&self) -> bool {
-        self.finished
+        self.start_time
+            .map(|x| x.elapsed().as_secs_f32() / self.duration.as_secs_f32() > 1.1)
+            .unwrap_or(false)
     }
     fn update_img(&mut self, img: &DynamicImage, ctx: &Context) {
-        self.finished = false;
+        self.start_time = None;
         let texture = Texture::from_image(img, ctx);
-        self.texture = texture;
-        let (_, bindgroup) = create_texture_binds(&[&self.texture], ctx);
+        std::mem::swap(&mut self.texture_a, &mut self.texture_b);
+        self.texture_b = texture;
+        let (_, bindgroup) = create_texture_binds(&[&self.texture_a, &self.texture_b], ctx);
         self.texture_bind_group = bindgroup;
     }
+
     fn render(&mut self, ctx: &Context) {
         let queue = ctx.queue();
         let device = ctx.device();
@@ -91,11 +145,7 @@ impl Animation for Static {
         let output = output.unwrap();
         let view = output.texture.create_view(&Default::default());
 
-        queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[ctx.surface_aspect_ratio() / self.texture.aspect_ratio()]),
-        );
+        self.update_uniform(ctx);
 
         let mut encoder = device.create_command_encoder(&Default::default());
         {
@@ -123,6 +173,5 @@ impl Animation for Static {
         }
         queue.submit(once(encoder.finish()));
         output.present();
-        self.finished = true;
     }
 }

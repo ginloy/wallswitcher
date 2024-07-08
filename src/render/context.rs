@@ -8,15 +8,15 @@ use raw_window_handle::{
 use smithay_client_toolkit::reexports::client;
 use smithay_client_toolkit::shell::{wlr_layer::LayerSurface, WaylandSurface};
 
-pub struct Context<'a> {
-    surface: wgpu::Surface<'a>,
+pub struct Context {
+    surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
 }
 
-impl<'a> Context<'a> {
-    pub async fn new(conn: &'a Connection, layer: &'a LayerSurface, size: (u32, u32)) -> Self {
+impl Context {
+    pub async fn new(conn: &Connection, layer: &LayerSurface, size: (u32, u32)) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -99,7 +99,7 @@ impl<'a> Context<'a> {
         self.config.width as f32 / self.config.height as f32
     }
 
-    pub fn surface(&self) -> &wgpu::Surface<'a> {
+    pub fn surface(&self) -> &wgpu::Surface<'static> {
         &self.surface
     }
 

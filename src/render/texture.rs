@@ -2,11 +2,13 @@ use std::path::Path;
 
 use anyhow::Result;
 use image::GenericImageView;
+use wgpu::Extent3d;
 
 use super::Context;
 
 pub struct Texture {
-    texture: wgpu::Texture,
+    // texture: wgpu::Texture,
+    size: Extent3d,
     view: wgpu::TextureView,
     sampler: wgpu::Sampler,
 }
@@ -67,15 +69,16 @@ impl Texture {
         });
 
         Self {
-            texture,
+            // texture,
+            size,
             view,
             sampler,
         }
     }
 
-    pub fn texture(&self) -> &wgpu::Texture {
-        &self.texture
-    }
+    // pub fn texture(&self) -> &wgpu::Texture {
+    //     &self.texture
+    // }
 
     pub fn view(&self) -> &wgpu::TextureView {
         &self.view
@@ -86,8 +89,8 @@ impl Texture {
     }
 
     pub fn aspect_ratio(&self) -> f32 {
-        let width = self.texture.width() as f32;
-        let height = self.texture.height() as f32;
+        let width = self.size.width as f32;
+        let height = self.size.height as f32;
         width / height
     }
 }

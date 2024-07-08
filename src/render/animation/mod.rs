@@ -1,10 +1,16 @@
 use super::{context::Context, Texture};
+use anyhow::Result;
 
-pub mod r#static;
+mod fade;
+mod r#static;
+pub use fade::Fade;
+use image::DynamicImage;
 pub use r#static::Static;
 use wgpu::util::DeviceExt;
 pub trait Animation {
     fn render(&mut self, ctx: &Context);
+    fn update_img(&mut self, img: &DynamicImage, ctx: &Context);
+    fn is_finished(&self) -> bool;
 }
 
 #[repr(C)]
@@ -74,48 +80,56 @@ pub fn create_index_buffer(ctx: &Context) -> wgpu::Buffer {
         })
 }
 pub fn create_texture_binds(
-    texture: &Texture,
+    textures: &[&Texture],
     ctx: &Context,
 ) -> (wgpu::BindGroupLayout, wgpu::BindGroup) {
     let device = ctx.device();
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-        ],
+        entries: (0..textures.len())
+            .flat_map(|i| {
+                [
+                    wgpu::BindGroupLayoutEntry {
+                        binding: (i * 2) as u32,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: (i * 2 + 1) as u32,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ]
+            })
+            .collect::<Vec<_>>()
+            .as_slice(),
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         layout: &layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(texture.view()),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(texture.sampler()),
-            },
-        ],
+        entries: textures
+            .iter()
+            .enumerate()
+            .flat_map(|(i, t)| {
+                [
+                    wgpu::BindGroupEntry {
+                        binding: i as u32 * 2,
+                        resource: wgpu::BindingResource::TextureView(t.view()),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: i as u32 * 2 + 1,
+                        resource: wgpu::BindingResource::Sampler(t.sampler()),
+                    },
+                ]
+            })
+            .collect::<Vec<_>>()
+            .as_slice(),
         label: None,
     });
     (layout, bind_group)
@@ -128,8 +142,8 @@ pub fn create_uniform_binds(
     let buffer = ctx.device().create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size,
-        mapped_at_creation: true,
-        usage: wgpu::BufferUsages::UNIFORM,
+        mapped_at_creation: false,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
     });
 
     let layout = ctx
@@ -138,7 +152,7 @@ pub fn create_uniform_binds(
             label: None,
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
+                visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
