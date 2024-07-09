@@ -1,9 +1,9 @@
 use image::DynamicImage;
+use once_cell::sync::Lazy;
 use rand::seq::SliceRandom;
 use std::{
-    borrow::Borrow,
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -37,6 +37,9 @@ use smithay_client_toolkit::{
         WaylandSurface,
     },
 };
+
+const FPS: f32 = 60.0;
+static FRAMETIME: Lazy<Duration> = Lazy::new(|| Duration::from_secs_f32(1.0 / FPS));
 
 use crate::{
     cli,
@@ -122,15 +125,26 @@ impl App {
             sender,
         };
 
-        let _ = event_loop_handler.insert_source(source, |event, _, app| {
+        let handler = event_loop_handler.clone();
+
+        let _ = event_loop_handler.insert_source(source, move |event, _, app| {
             if let calloop::channel::Event::Msg(event) = event {
                 match event {
                     AppEvent::Draw => {
+                        let start = Instant::now();
                         app.draw();
+                        let delay = if start.elapsed() >= *FRAMETIME {
+                            Duration::ZERO
+                        } else {
+                            *FRAMETIME - start.elapsed()
+                        };
+                        debug!("Delay: {} ms", delay.as_millis());
                         if !app.animation.is_finished() {
-                            app.sender
-                                .send(AppEvent::Draw)
-                                .expect("AppEvent channel closed");
+                            let _ =
+                                handler.insert_source(Timer::from_duration(delay), |_, _, app| {
+                                    app.sender.send(AppEvent::Draw).unwrap();
+                                    TimeoutAction::Drop
+                                });
                         }
                     }
                 }

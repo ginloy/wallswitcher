@@ -1759,6 +1759,7 @@ dependencies = [
  "image",
  "keyframe",
  "log",
+ "once_cell",
  "pollster",
  "rand",
  "raw-window-handle",
