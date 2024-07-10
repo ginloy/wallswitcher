@@ -22,10 +22,10 @@ var<uniform> uniform: Uniform;
 fn scale(coords: vec2<f32>, surface_to_image_arr: f32) -> vec2<f32> {
   if (surface_to_image_arr > 1.0) {
     let scale = 1.0 / surface_to_image_arr;
-    return coords * vec2<f32>(1.0, scale) + vec2<f32>(0.0, 0.5 * (1.0 - scale));
+    return coords * vec2<f32>(1.0, scale) * vec2f(1.0, -1.0) / 2.0 + 0.5;
   } else {
     let scale = surface_to_image_arr;
-    return coords * vec2<f32>(scale, 1.0) + vec2<f32>(0.5 * (1.0 - scale), 0.0);
+    return coords * vec2<f32>(scale, 1.0) * vec2f(1.0, -1.0) / 2.0 + 0.5;
   }
 }
 
@@ -36,8 +36,8 @@ fn vs_main(
   var out: VertexOutput;
   out.clip_position = vec4<f32>(model.position, 1.0);
 
-  out.tex_coords_a = scale(model.tex_coords, uniform.surface_to_image_a_arr);
-  out.tex_coords_b = scale(model.tex_coords, uniform.surface_to_image_b_arr);
+  out.tex_coords_a = scale(model.position.xy, uniform.surface_to_image_a_arr);
+  out.tex_coords_b = scale(model.position.xy, uniform.surface_to_image_b_arr);
 
   return out;
 }

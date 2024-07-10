@@ -32,7 +32,6 @@ impl Static {
 
     pub fn from_img(img: &DynamicImage, ctx: &Context) -> Self {
         let texture = Texture::from_image(img, ctx);
-        let finished = false;
 
         let (texture_bind_group_layout, texture_bind_group) =
             create_texture_binds(&[&texture], ctx);

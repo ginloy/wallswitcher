@@ -1,5 +1,4 @@
 use super::{context::Context, Texture};
-use anyhow::Result;
 
 mod fade;
 mod r#static;

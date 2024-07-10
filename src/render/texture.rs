@@ -2,13 +2,12 @@ use std::path::Path;
 
 use anyhow::Result;
 use image::GenericImageView;
-use wgpu::Extent3d;
 
 use super::Context;
 
 pub struct Texture {
     // texture: wgpu::Texture,
-    size: Extent3d,
+    size: wgpu::Extent3d,
     view: wgpu::TextureView,
     sampler: wgpu::Sampler,
 }
@@ -18,6 +17,7 @@ impl Texture {
         let img = image::open(path)?;
         Ok(Self::from_image(&img, ctx))
     }
+
     pub fn from_image(img: &image::DynamicImage, ctx: &Context) -> Self {
         let device = ctx.device();
         let queue = ctx.queue();

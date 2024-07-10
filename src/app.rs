@@ -43,7 +43,7 @@ static FRAMETIME: Lazy<Duration> = Lazy::new(|| Duration::from_secs_f32(1.0 / FP
 
 use crate::{
     cli,
-    render::{self, animation::Static, Animation},
+    render::{self, Animation},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -102,7 +102,7 @@ impl App {
         let animation = Box::new(crate::render::animation::Fade::new(
             &Self::load_random_img(&img_dir).unwrap(),
             &Self::load_random_img(&img_dir).unwrap(),
-            Duration::from_secs(5),
+            Duration::from_secs(8),
             &ctx,
         ));
 
@@ -212,14 +212,6 @@ impl App {
 
     fn load_img(&self) -> Result<DynamicImage> {
         Self::load_random_img(&self.img_dir)
-    }
-
-    fn load_static(&mut self) -> Result<()> {
-        self.load_img()
-            .map(|i| Static::from_img(&i, &self.ctx))
-            .map(|a| {
-                self.animation = Box::new(a);
-            })
     }
 }
 impl CompositorHandler for App {
