@@ -19,7 +19,7 @@ use client::{
     Connection, QueueHandle,
 };
 use smithay_client_toolkit::{
-    compositor::{CompositorHandler, CompositorState},
+    compositor::{CompositorHandler, CompositorState, Region},
     delegate_compositor, delegate_layer, delegate_output, delegate_registry,
     output::{OutputHandler, OutputState},
     reexports::{
@@ -96,6 +96,17 @@ impl App {
         layer.set_anchor(Anchor::all());
         layer.set_size(0, 0);
         layer.set_exclusive_zone(-1);
+
+        match Region::new(&compositor_state) {
+            Ok(region) => {
+                layer.set_input_region(Some(region.wl_region()));
+                region.wl_region().destroy();
+            }
+            Err(e) => {
+                warn!("Failed to set input region, background may not have cursor: {e}");
+            }
+        }
+
         layer.commit();
 
         let ctx = pollster::block_on(render::Context::new(&conn, &layer, (256, 256)));
