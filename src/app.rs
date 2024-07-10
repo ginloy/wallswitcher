@@ -40,6 +40,8 @@ use smithay_client_toolkit::{
 
 const FPS: f32 = 60.0;
 static FRAMETIME: Lazy<Duration> = Lazy::new(|| Duration::from_secs_f32(1.0 / FPS));
+const MIN_FPS: f32 = 5.0;
+static MAX_FRAMETIME: Lazy<Duration> = Lazy::new(|| Duration::from_secs_f32(1.0 / MIN_FPS));
 
 use crate::{
     cli,
@@ -67,7 +69,8 @@ pub struct App {
 
     img_dir: PathBuf,
     interval: Duration,
-    sender: calloop::channel::Sender<AppEvent>,
+    configured: bool,
+    frame_timer: FrameTimer,
 }
 
 impl App {
@@ -119,7 +122,6 @@ impl App {
 
         let mut event_loop: EventLoop<App> = EventLoop::try_new()?;
         let event_loop_handler = event_loop.handle();
-        let (sender, source) = calloop::channel::channel();
 
         let mut app = Self {
             conn,
@@ -133,43 +135,30 @@ impl App {
 
             img_dir,
             interval,
-            sender,
+            configured: false,
+            frame_timer: FrameTimer::new(FPS),
         };
 
-        let handler = event_loop_handler.clone();
-
-        let _ = event_loop_handler.insert_source(source, move |event, _, app| {
-            if let calloop::channel::Event::Msg(event) = event {
-                match event {
-                    AppEvent::Draw => {
-                        let start = Instant::now();
-                        app.draw();
-                        let delay = if start.elapsed() >= *FRAMETIME {
-                            Duration::ZERO
-                        } else {
-                            *FRAMETIME - start.elapsed()
-                        };
-                        debug!("Delay: {} ms", delay.as_millis());
-                        if !app.animation.is_finished() {
-                            let _ =
-                                handler.insert_source(Timer::from_duration(delay), |_, _, app| {
-                                    app.sender.send(AppEvent::Draw).unwrap();
-                                    TimeoutAction::Drop
-                                });
-                        }
+        let _ = event_loop_handler.insert_source(
+            Timer::from_deadline(app.frame_timer.next_frame()),
+            |_, _, app| {
+                if app.frame_timer.start() {
+                    app.draw();
+                    if app.animation.is_finished() {
+                        app.frame_timer.set_fps(MIN_FPS);
+                    } else {
+                        app.frame_timer.set_fps(FPS);
                     }
                 }
-            }
-        });
+                TimeoutAction::ToInstant(app.frame_timer.next_frame())
+            },
+        );
 
         event_loop_handler
             .insert_source(Timer::from_duration(app.interval), |_, _, app| {
                 match app.load_img() {
                     Ok(img) => {
                         app.animation.update_img(&img, &app.ctx);
-                        app.sender
-                            .send(AppEvent::Draw)
-                            .expect("AppEvent channel closed");
                     }
                     Err(e) => {
                         error!("Could not load new img: {e}");
@@ -318,7 +307,8 @@ impl LayerShellHandler for App {
         _serial: u32,
     ) {
         self.ctx.resize(_configure.new_size);
-        let _ = self.sender.send(AppEvent::Draw);
+        self.configured = true;
+        self.draw();
         // _layer.set_size(self.dimensions.0, self.dimensions.1);
     }
 
@@ -328,6 +318,7 @@ impl LayerShellHandler for App {
         _qh: &QueueHandle<Self>,
         _layer: &smithay_client_toolkit::shell::wlr_layer::LayerSurface,
     ) {
+        warn!("Surface closed");
     }
 }
 delegate_layer!(App);
@@ -340,3 +331,37 @@ impl ProvidesRegistryState for App {
     registry_handlers![OutputState];
 }
 delegate_registry!(App);
+
+struct FrameTimer {
+    fps: f32,
+    start: Instant,
+}
+
+impl FrameTimer {
+    fn new(fps: f32) -> Self {
+        Self {
+            fps,
+            start: Instant::now(),
+        }
+    }
+
+    fn frametime(&self) -> Duration {
+        Duration::from_secs_f32(1.0 / self.fps)
+    }
+
+    fn start(&mut self) -> bool {
+        if (self.start + self.frametime()) > Instant::now() {
+            return false;
+        }
+        self.start = Instant::now();
+        true
+    }
+
+    fn next_frame(&self) -> Instant {
+        self.start + self.frametime()
+    }
+
+    fn set_fps(&mut self, fps: f32) {
+        self.fps = fps;
+    }
+}
