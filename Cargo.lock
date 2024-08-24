@@ -1580,6 +1580,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
+name = "wallswitcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "chrono",
+ "clap",
+ "ctrlc",
+ "env_logger",
+ "image",
+ "keyframe",
+ "log",
+ "once_cell",
+ "pollster",
+ "rand",
+ "raw-window-handle",
+ "rayon",
+ "smithay-client-toolkit",
+ "timer",
+ "wayland-backend",
+ "wayland-client",
+ "wgpu",
+]
+
+[[package]]
 name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1744,31 +1769,6 @@ dependencies = [
  "dlib",
  "log",
  "pkg-config",
-]
-
-[[package]]
-name = "wayland_test"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "chrono",
- "clap",
- "ctrlc",
- "env_logger",
- "image",
- "keyframe",
- "log",
- "once_cell",
- "pollster",
- "rand",
- "raw-window-handle",
- "rayon",
- "smithay-client-toolkit",
- "timer",
- "wayland-backend",
- "wayland-client",
- "wgpu",
 ]
 
 [[package]]
