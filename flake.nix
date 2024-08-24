@@ -28,10 +28,10 @@
               vulkan-loader
             ];
             postInstall = ''
-              patchelf --shrink-rpath $out/bin/wayland_test
+              patchelf --shrink-rpath $out/bin/wallswitcher
               patchelf --add-rpath ${lib.makeLibraryPath [
                 vulkan-loader
-              ]} $out/bin/wayland_test
+              ]} $out/bin/wallswitcher
             '';
             dontPatchELF = true;
           };
